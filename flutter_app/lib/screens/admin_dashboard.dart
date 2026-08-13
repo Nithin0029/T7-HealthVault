@@ -44,6 +44,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       _masterDataFuture = Future.wait([
         LocalDbService.getStates(widget.token),
         LocalDbService.getDistricts(widget.token),
+        LocalDbService.getTaluks(widget.token),
         LocalDbService.getAreas(widget.token),
       ]);
     });
@@ -67,12 +68,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     Future.wait([
       LocalDbService.getStates(widget.token),
       LocalDbService.getDistricts(widget.token),
+      LocalDbService.getTaluks(widget.token),
       LocalDbService.getAreas(widget.token),
     ]).then((results) {
       if (!mounted) return;
       final states = results[0];
       final districts = results[1];
-      final areas = results[2];
+      final taluks = results[2];
+      final areas = results[3];
 
       if (states.isEmpty || districts.isEmpty || areas.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -92,6 +95,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       // FIX: UUIDs from Django are strings, not ints
       String? selectedStateId;
       String? selectedDistrictId;
+      String? selectedTalukId;
       List<String> selectedAreaIds = [];
       String? pickedImageBase64;
 
@@ -184,6 +188,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         if (val != null) {
                           setModalState(() {
                             selectedDistrictId = val;
+                            selectedTalukId = null;
                             selectedAreaIds.clear();
                           });
                         }
@@ -191,12 +196,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (selectedDistrictId == null)
-                    const Text('Please select a state and district first to see areas.', style: TextStyle(color: Colors.orange, fontSize: 13))
+                  if (selectedDistrictId != null) ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedTalukId,
+                      decoration: const InputDecoration(labelText: 'Select Taluk'),
+                      items: taluks
+                          .where((t) => t['district_id'].toString() == selectedDistrictId)
+                          .map<DropdownMenuItem<String>>((t) => DropdownMenuItem<String>(
+                                value: t['id'].toString(),
+                                child: Text(t['name'] ?? 'Taluk'),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setModalState(() {
+                            selectedTalukId = val;
+                            selectedAreaIds.clear();
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (selectedTalukId == null)
+                    const Text('Please select state, district, and taluk to see areas.', style: TextStyle(color: Colors.orange, fontSize: 13))
                   else
                     InkWell(
                       onTap: () async {
-                        final stateAreas = areas.where((a) => a['district_id'].toString() == selectedDistrictId).toList();
+                        final filteredAreas = areas.where((a) => a['taluk_id'].toString() == selectedTalukId).toList();
                         await showDialog(
                           context: context,
                           builder: (context) {
@@ -208,10 +235,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                     width: 300,
                                     height: 300,
                                     child: ListView(
-                                      children: stateAreas.map((a) {
+                                      children: filteredAreas.map((a) {
                                         final areaId = a['id'].toString();
                                         return CheckboxListTile(
-                                          title: Text('${a["village_or_ward"] ?? "Ward"} (${a["district_name"] ?? "District"})'),
+                                          title: Text('${a["village_or_ward"] ?? "Ward"} (Block: ${a["block"] ?? "District"})'),
                                           value: selectedAreaIds.contains(areaId),
                                           onChanged: (bool? checked) {
                                             setMultiSelectState(() {
@@ -293,12 +320,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     Future.wait([
       LocalDbService.getStates(widget.token),
       LocalDbService.getDistricts(widget.token),
+      LocalDbService.getTaluks(widget.token),
       LocalDbService.getAreas(widget.token),
     ]).then((results) {
       if (!mounted) return;
       final states = results[0];
       final districts = results[1];
-      final areas = results[2];
+      final taluks = results[2];
+      final areas = results[3];
 
       if (states.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -318,11 +347,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       String? selectedStateId = worker['state']?.toString();
       List<String> selectedAreaIds = List<String>.from(worker['assigned_areas']?.map((id) => id.toString()) ?? []);
       String? selectedDistrictId;
+      String? selectedTalukId;
       if (selectedAreaIds.isNotEmpty) {
         final firstAreaId = selectedAreaIds.first;
         final firstArea = _firstWhereOrNull(areas, (a) => a['id'].toString() == firstAreaId);
         if (firstArea != null) {
           selectedDistrictId = firstArea['district_id']?.toString();
+          selectedTalukId = firstArea['taluk_id']?.toString();
         }
       }
       String userId = worker['id'].toString();
@@ -417,6 +448,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         if (val != null) {
                           setModalState(() {
                             selectedDistrictId = val;
+                            selectedTalukId = null;
                             selectedAreaIds.clear();
                           });
                         }
@@ -424,12 +456,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (selectedDistrictId == null)
-                    const Text('Please select a state and district first to see areas.', style: TextStyle(color: Colors.orange, fontSize: 13))
+                  if (selectedDistrictId != null) ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedTalukId,
+                      decoration: const InputDecoration(labelText: 'Select Taluk'),
+                      items: taluks
+                          .where((t) => t['district_id'].toString() == selectedDistrictId)
+                          .map<DropdownMenuItem<String>>((t) => DropdownMenuItem<String>(
+                                value: t['id'].toString(),
+                                child: Text(t['name'] ?? 'Taluk'),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setModalState(() {
+                            selectedTalukId = val;
+                            selectedAreaIds.clear();
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (selectedTalukId == null)
+                    const Text('Please select state, district, and taluk to see areas.', style: TextStyle(color: Colors.orange, fontSize: 13))
                   else
                     InkWell(
                       onTap: () async {
-                        final stateAreas = areas.where((a) => a['district_id'].toString() == selectedDistrictId).toList();
+                        final filteredAreas = areas.where((a) => a['taluk_id'].toString() == selectedTalukId).toList();
                         await showDialog(
                           context: context,
                           builder: (context) {
@@ -441,10 +495,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                     width: 300,
                                     height: 300,
                                     child: ListView(
-                                      children: stateAreas.map((a) {
+                                      children: filteredAreas.map((a) {
                                         final areaId = a['id'].toString();
                                         return CheckboxListTile(
-                                          title: Text('${a["village_or_ward"] ?? "Ward"} (${a["district_name"] ?? "District"})'),
+                                          title: Text('${a["village_or_ward"] ?? "Ward"} (Block: ${a["block"] ?? "District"})'),
                                           value: selectedAreaIds.contains(areaId),
                                           onChanged: (bool? checked) {
                                             setMultiSelectState(() {
@@ -528,15 +582,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     Future.wait([
       LocalDbService.getStates(widget.token),
       LocalDbService.getDistricts(widget.token),
+      LocalDbService.getTaluks(widget.token),
     ]).then((results) {
       if (!mounted) return;
       final states = results[0];
       final districts = results[1];
+      final taluks = results[2];
 
       if (states.isEmpty) { _showAddStateDialog(); return; }
+      if (districts.isEmpty) { _showAddDistrictTopLevelDialog(); return; }
+      if (taluks.isEmpty) { _showAddTalukDialog(); return; }
 
       String selectedStateId = states.first['id'].toString();
       String? selectedDistrictId;
+      String? selectedTalukId;
+      String selectedAreaType = 'LOCALITY';
 
       final blockCtrl = TextEditingController();
       final wardCtrl = TextEditingController();
@@ -553,54 +613,91 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ]),
             content: SizedBox(
               width: 400,
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                DropdownButtonFormField<String>(
-                  initialValue: selectedStateId,
-                  decoration: const InputDecoration(labelText: 'Select State'),
-                  items: states.map<DropdownMenuItem<String>>((s) => DropdownMenuItem<String>(
-                    value: s['id'].toString(),
-                    child: Text(s['name'] ?? 'State'),
-                  )).toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setModalState(() {
-                        selectedStateId = val;
-                        selectedDistrictId = null;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedDistrictId,
-                  decoration: const InputDecoration(labelText: 'Select District'),
-                  items: districts
-                      .where((d) => d['state_id'].toString() == selectedStateId)
-                      .map<DropdownMenuItem<String>>((d) => DropdownMenuItem<String>(
-                            value: d['id'].toString(),
-                            child: Text(d['name'] ?? 'District'),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setModalState(() => selectedDistrictId = val);
-                  },
-                ),
-                const SizedBox(height: 8),
-                TextField(controller: blockCtrl, decoration: const InputDecoration(labelText: 'Block Name')),
-                const SizedBox(height: 8),
-                TextField(controller: wardCtrl, decoration: const InputDecoration(labelText: 'Village / Ward Name')),
-              ]),
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedStateId,
+                    decoration: const InputDecoration(labelText: 'Select State'),
+                    items: states.map<DropdownMenuItem<String>>((s) => DropdownMenuItem<String>(
+                      value: s['id'].toString(),
+                      child: Text(s['name'] ?? 'State'),
+                    )).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setModalState(() {
+                          selectedStateId = val;
+                          selectedDistrictId = null;
+                          selectedTalukId = null;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedDistrictId,
+                    decoration: const InputDecoration(labelText: 'Select District'),
+                    items: districts
+                        .where((d) => d['state_id'].toString() == selectedStateId)
+                        .map<DropdownMenuItem<String>>((d) => DropdownMenuItem<String>(
+                              value: d['id'].toString(),
+                              child: Text(d['name'] ?? 'District'),
+                            ))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setModalState(() {
+                          selectedDistrictId = val;
+                          selectedTalukId = null;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedTalukId,
+                    decoration: const InputDecoration(labelText: 'Select Taluk'),
+                    items: taluks
+                        .where((t) => t['district_id'].toString() == selectedDistrictId)
+                        .map<DropdownMenuItem<String>>((t) => DropdownMenuItem<String>(
+                              value: t['id'].toString(),
+                              child: Text(t['name'] ?? 'Taluk'),
+                            ))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) setModalState(() => selectedTalukId = val);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedAreaType,
+                    decoration: const InputDecoration(labelText: 'Area Type'),
+                    items: const [
+                      DropdownMenuItem(value: 'GRAM_PANCHAYAT', child: Text('Gram Panchayat')),
+                      DropdownMenuItem(value: 'URBAN_WARD', child: Text('Urban Ward')),
+                      DropdownMenuItem(value: 'LOCALITY', child: Text('Locality')),
+                      DropdownMenuItem(value: 'VILLAGE', child: Text('Village')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setModalState(() => selectedAreaType = val);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(controller: blockCtrl, decoration: const InputDecoration(labelText: 'Parent Level (Ward / GP name)')),
+                  const SizedBox(height: 8),
+                  TextField(controller: wardCtrl, decoration: const InputDecoration(labelText: 'Specific Name (Locality / Village)')),
+                ]),
+              ),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00796B), foregroundColor: Colors.white),
                 onPressed: () async {
-                  if (selectedDistrictId != null && wardCtrl.text.isNotEmpty) {
+                  if (selectedDistrictId != null && selectedTalukId != null && wardCtrl.text.isNotEmpty) {
                     final messenger = ScaffoldMessenger.of(context);
                     final ok = await LocalDbService.addArea(
-                      widget.token, selectedDistrictId!,
-                      blockCtrl.text.trim(), wardCtrl.text.trim(),
+                      widget.token, selectedDistrictId!, selectedTalukId!,
+                      blockCtrl.text.trim(), wardCtrl.text.trim(), selectedAreaType,
                     );
                     if (!mounted) return;
                     Navigator.pop(ctx);
@@ -687,6 +784,152 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         ],
       ),
     );
+  }
+
+  void _showAddTalukDialog() {
+    Future.wait([
+      LocalDbService.getStates(widget.token),
+      LocalDbService.getDistricts(widget.token),
+    ]).then((results) {
+      if (!mounted) return;
+      final states = results[0];
+      final districts = results[1];
+
+      if (states.isEmpty) { _showAddStateDialog(); return; }
+      if (districts.isEmpty) { _showAddDistrictTopLevelDialog(); return; }
+
+      String selectedStateId = states.first['id'].toString();
+      String selectedDistrictId = districts.where((d) => d['state_id'].toString() == selectedStateId).first['id'].toString();
+      final talukCtrl = TextEditingController();
+
+      showDialog(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setModalState) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(children: [
+              Icon(Icons.location_on_outlined, color: Color(0xFF00796B)),
+              SizedBox(width: 8),
+              Text('Add New Taluk'),
+            ]),
+            content: SizedBox(
+              width: 350,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                DropdownButtonFormField<String>(
+                  initialValue: selectedStateId,
+                  decoration: const InputDecoration(labelText: 'Select State'),
+                  items: states.map<DropdownMenuItem<String>>((s) => DropdownMenuItem<String>(
+                    value: s['id'].toString(),
+                    child: Text(s['name'] ?? 'State'),
+                  )).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setModalState(() {
+                        selectedStateId = val;
+                        selectedDistrictId = districts.where((d) => d['state_id'].toString() == selectedStateId).first['id'].toString();
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedDistrictId,
+                  decoration: const InputDecoration(labelText: 'Select District'),
+                  items: districts
+                      .where((d) => d['state_id'].toString() == selectedStateId)
+                      .map<DropdownMenuItem<String>>((d) => DropdownMenuItem<String>(
+                            value: d['id'].toString(),
+                            child: Text(d['name'] ?? 'District'),
+                          ))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) setModalState(() => selectedDistrictId = val);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: talukCtrl, decoration: const InputDecoration(labelText: 'Taluk Name')),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00796B), foregroundColor: Colors.white),
+                onPressed: () async {
+                  if (talukCtrl.text.isNotEmpty) {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final ok = await LocalDbService.addTaluk(
+                      widget.token, selectedDistrictId, talukCtrl.text.trim(),
+                    );
+                    if (!mounted) return;
+                    Navigator.pop(ctx);
+                    messenger.showSnackBar(SnackBar(
+                      content: Text(ok ? 'Taluk Created!' : 'Failed to create taluk.'),
+                      backgroundColor: ok ? Colors.green : Colors.redAccent,
+                    ));
+                    if (ok) _refreshData();
+                  }
+                },
+                child: const Text('Save Taluk'),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
+  void _showEditTalukDialog(Map<String, dynamic> taluk) {
+    final talukCtrl = TextEditingController(text: taluk['name']);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Edit Taluk'),
+        content: SizedBox(
+          width: 350,
+          child: TextField(controller: talukCtrl, decoration: const InputDecoration(labelText: 'Taluk Name')),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (talukCtrl.text.isNotEmpty) {
+                final messenger = ScaffoldMessenger.of(context);
+                final ok = await LocalDbService.editTaluk(widget.token, taluk['id'].toString(), taluk['district_id'].toString(), talukCtrl.text.trim());
+                if (!mounted) return;
+                Navigator.pop(ctx);
+                messenger.showSnackBar(SnackBar(
+                  content: Text(ok ? 'Taluk Updated!' : 'Failed to update taluk.'),
+                  backgroundColor: ok ? Colors.green : Colors.redAccent,
+                ));
+                if (ok) _refreshData();
+              }
+            },
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteTaluk(Map<String, dynamic> taluk) {
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Delete Taluk?'),
+      content: Text('Are you sure you want to delete ${taluk["name"]}?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () async {
+            final ok = await LocalDbService.deleteTaluk(widget.token, taluk['id'].toString());
+            if (!mounted) return;
+            if (ctx.mounted) Navigator.pop(ctx);
+            if (ok) _refreshData();
+          },
+          child: const Text('Delete', style: TextStyle(color: Colors.white)),
+        )
+      ]
+    ));
   }
 
   void _showAddDistrictTopLevelDialog() {
@@ -795,10 +1038,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     Future.wait([
       LocalDbService.getStates(widget.token),
       LocalDbService.getDistricts(widget.token),
+      LocalDbService.getTaluks(widget.token),
     ]).then((results) {
       if (!mounted) return;
       final states = results[0];
       final districts = results[1];
+      final taluks = results[2];
 
       if (states.isEmpty) { 
         if (mounted) {
@@ -809,7 +1054,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
       final blockCtrl = TextEditingController(text: area['block']);
       final wardCtrl = TextEditingController(text: area['village_or_ward']);
+      String? selectedTalukId = area['taluk_id']?.toString();
       String? selectedDistrictId = area['district_id']?.toString();
+      String selectedAreaType = area['area_type'] ?? 'LOCALITY';
       String? derivedStateId;
       if (selectedDistrictId != null) {
         final dist = _firstWhereOrNull(districts, (d) => d['id'].toString() == selectedDistrictId);
@@ -829,54 +1076,91 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ]),
             content: SizedBox(
               width: 400,
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                DropdownButtonFormField<String>(
-                  initialValue: selectedStateId,
-                  decoration: const InputDecoration(labelText: 'Select State'),
-                  items: states.map<DropdownMenuItem<String>>((s) => DropdownMenuItem<String>(
-                    value: s['id'].toString(),
-                    child: Text(s['name'] ?? 'State'),
-                  )).toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setModalState(() {
-                        selectedStateId = val;
-                        selectedDistrictId = null;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedDistrictId,
-                  decoration: const InputDecoration(labelText: 'Select District'),
-                  items: districts
-                      .where((d) => d['state_id'].toString() == selectedStateId)
-                      .map<DropdownMenuItem<String>>((d) => DropdownMenuItem<String>(
-                            value: d['id'].toString(),
-                            child: Text(d['name'] ?? 'District'),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setModalState(() => selectedDistrictId = val);
-                  },
-                ),
-                const SizedBox(height: 8),
-                TextField(controller: blockCtrl, decoration: const InputDecoration(labelText: 'Block Name')),
-                const SizedBox(height: 8),
-                TextField(controller: wardCtrl, decoration: const InputDecoration(labelText: 'Village / Ward Name')),
-              ]),
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedStateId,
+                    decoration: const InputDecoration(labelText: 'Select State'),
+                    items: states.map<DropdownMenuItem<String>>((s) => DropdownMenuItem<String>(
+                      value: s['id'].toString(),
+                      child: Text(s['name'] ?? 'State'),
+                    )).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setModalState(() {
+                          selectedStateId = val;
+                          selectedDistrictId = null;
+                          selectedTalukId = null;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedDistrictId,
+                    decoration: const InputDecoration(labelText: 'Select District'),
+                    items: districts
+                        .where((d) => d['state_id'].toString() == selectedStateId)
+                        .map<DropdownMenuItem<String>>((d) => DropdownMenuItem<String>(
+                              value: d['id'].toString(),
+                              child: Text(d['name'] ?? 'District'),
+                            ))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setModalState(() {
+                          selectedDistrictId = val;
+                          selectedTalukId = null;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedTalukId,
+                    decoration: const InputDecoration(labelText: 'Select Taluk'),
+                    items: taluks
+                        .where((t) => t['district_id'].toString() == selectedDistrictId)
+                        .map<DropdownMenuItem<String>>((t) => DropdownMenuItem<String>(
+                              value: t['id'].toString(),
+                              child: Text(t['name'] ?? 'Taluk'),
+                            ))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) setModalState(() => selectedTalukId = val);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedAreaType,
+                    decoration: const InputDecoration(labelText: 'Area Type'),
+                    items: const [
+                      DropdownMenuItem(value: 'GRAM_PANCHAYAT', child: Text('Gram Panchayat')),
+                      DropdownMenuItem(value: 'URBAN_WARD', child: Text('Urban Ward')),
+                      DropdownMenuItem(value: 'LOCALITY', child: Text('Locality')),
+                      DropdownMenuItem(value: 'VILLAGE', child: Text('Village')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setModalState(() => selectedAreaType = val);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(controller: blockCtrl, decoration: const InputDecoration(labelText: 'Parent Level (Ward / GP name)')),
+                  const SizedBox(height: 8),
+                  TextField(controller: wardCtrl, decoration: const InputDecoration(labelText: 'Specific Name (Locality / Village)')),
+                ]),
+              ),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00796B), foregroundColor: Colors.white),
                 onPressed: () async {
-                  if (selectedDistrictId != null && wardCtrl.text.isNotEmpty) {
+                  if (selectedDistrictId != null && selectedTalukId != null && wardCtrl.text.isNotEmpty) {
                     final messenger = ScaffoldMessenger.of(context);
                     final ok = await LocalDbService.editArea(
-                      widget.token, area['id'].toString(), selectedDistrictId!,
-                      blockCtrl.text.trim(), wardCtrl.text.trim(),
+                      widget.token, area['id'].toString(), selectedDistrictId!, selectedTalukId!,
+                      blockCtrl.text.trim(), wardCtrl.text.trim(), selectedAreaType,
                     );
                     if (!mounted) return;
                     Navigator.pop(ctx);
@@ -1203,10 +1487,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           ]));
         }
 
-        final states = snapshot.data?[0] ?? [];
-        final districts = snapshot.data?[1] ?? [];
-        final areas = snapshot.data?[2] ?? [];
-
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -1238,6 +1518,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   icon: const Icon(Icons.location_city, size: 15),
                   label: const Text('+ District'),
                 ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    side: const BorderSide(color: Color(0xFF00796B)),
+                    foregroundColor: const Color(0xFF00796B),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _showAddTalukDialog,
+                  icon: const Icon(Icons.location_on_outlined, size: 15),
+                  label: const Text('+ Taluk'),
+                ),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00796B), foregroundColor: Colors.white,
@@ -1255,9 +1547,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
             Builder(
               builder: (context) {
+                final states = snapshot.data![0];
+                final districts = snapshot.data![1];
+                final taluks = snapshot.data![2];
+                final areas = snapshot.data![3];
+
                 final districtMap = {for (var d in districts) d['id'].toString(): d};
+                final talukMap = {for (var t in taluks) t['id'].toString(): t};
                 
-                Map<String, Map<String, List<dynamic>>> hierarchy = {};
+                // hierarchy[state][district][taluk] = List<Area>
+                Map<String, Map<String, Map<String, List<dynamic>>>> hierarchy = {};
                 
                 for (var s in states) {
                   String sName = s['name']?.toString() ?? 'Unknown State';
@@ -1271,22 +1570,46 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     String sName = stateObj['name']?.toString() ?? 'Unknown State';
                     String dName = d['name']?.toString() ?? 'Unknown District';
                     if (hierarchy.containsKey(sName)) {
-                      hierarchy[sName]![dName] = [];
+                      hierarchy[sName]![dName] = {};
+                    }
+                  }
+                }
+
+                for (var t in taluks) {
+                  String districtId = t['district_id']?.toString() ?? '';
+                  final distObj = districtMap[districtId];
+                  if (distObj != null) {
+                    String stateId = distObj['state_id']?.toString() ?? '';
+                    final stateObj = _firstWhereOrNull(states, (s) => s['id']?.toString() == stateId);
+                    if (stateObj != null) {
+                      String sName = stateObj['name']?.toString() ?? 'Unknown State';
+                      String dName = distObj['name']?.toString() ?? 'Unknown District';
+                      String tName = t['name']?.toString() ?? 'Unknown Taluk';
+                      if (hierarchy.containsKey(sName) && hierarchy[sName]!.containsKey(dName)) {
+                        hierarchy[sName]![dName]![tName] = [];
+                      }
                     }
                   }
                 }
 
                 for (var area in areas) {
-                  String districtId = area['district_id']?.toString() ?? '';
-                  var districtData = districtMap[districtId];
-                  if (districtData != null) {
-                    String stateId = districtData['state_id']?.toString() ?? '';
-                    final stateObj = _firstWhereOrNull(states, (s) => s['id']?.toString() == stateId);
-                    if (stateObj != null) {
-                      String sName = stateObj['name']?.toString() ?? 'Unknown State';
-                      String dName = districtData['name']?.toString() ?? 'Unknown District';
-                      if (hierarchy.containsKey(sName) && hierarchy[sName]!.containsKey(dName)) {
-                        hierarchy[sName]![dName]!.add(area);
+                  String talukId = area['taluk_id']?.toString() ?? '';
+                  var talukData = talukMap[talukId];
+                  if (talukData != null) {
+                    String districtId = talukData['district_id']?.toString() ?? '';
+                    var districtData = districtMap[districtId];
+                    if (districtData != null) {
+                      String stateId = districtData['state_id']?.toString() ?? '';
+                      final stateObj = _firstWhereOrNull(states, (s) => s['id']?.toString() == stateId);
+                      if (stateObj != null) {
+                        String sName = stateObj['name']?.toString() ?? 'Unknown State';
+                        String dName = districtData['name']?.toString() ?? 'Unknown District';
+                        String tName = talukData['name']?.toString() ?? 'Unknown Taluk';
+                        if (hierarchy.containsKey(sName) && 
+                            hierarchy[sName]!.containsKey(dName) && 
+                            hierarchy[sName]![dName]!.containsKey(tName)) {
+                          hierarchy[sName]![dName]![tName]!.add(area);
+                        }
                       }
                     }
                   }
@@ -1310,7 +1633,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 return Column(
                   children: hierarchy.entries.map((stateEntry) {
                     String stateName = stateEntry.key;
-                    Map<String, List<dynamic>> stateDistricts = stateEntry.value;
+                    Map<String, Map<String, List<dynamic>>> stateDistricts = stateEntry.value;
                     
                     final stateObj = _firstWhereOrNull(
                       states,
@@ -1344,7 +1667,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                             ? [const Padding(padding: EdgeInsets.all(16), child: Text('No districts added yet', style: TextStyle(color: Colors.grey)))]
                             : stateDistricts.entries.map((districtEntry) {
                           String districtName = districtEntry.key;
-                          List<dynamic> districtAreas = districtEntry.value;
+                          Map<String, List<dynamic>> districtTaluks = districtEntry.value;
                           
                           final districtObj = _firstWhereOrNull(
                             districts,
@@ -1371,30 +1694,71 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                   ]
                                 ],
                               ),
-                              children: districtAreas.isEmpty
-                                ? [const Padding(padding: EdgeInsets.only(left: 54.0, bottom: 16.0), child: Align(alignment: Alignment.centerLeft, child: Text('No areas added yet', style: TextStyle(color: Colors.grey))))]
-                                : districtAreas.map((area) {
-                                return ListTile(
-                                  contentPadding: const EdgeInsets.only(left: 54.0, right: 16.0),
-                                  leading: const Icon(Icons.map_outlined, size: 20, color: Colors.grey),
-                                  title: Text(area['village_or_ward'] ?? 'Unnamed Area'),
-                                  subtitle: Text('Block: ${area['block'] ?? '-'}'),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, color: Colors.teal, size: 20),
-                                        onPressed: () => _showEditAreaDialog(area),
+                              children: districtTaluks.isEmpty
+                                ? [const Padding(padding: EdgeInsets.only(left: 54.0, bottom: 16.0), child: Align(alignment: Alignment.centerLeft, child: Text('No taluks added yet', style: TextStyle(color: Colors.grey))))]
+                                : districtTaluks.entries.map((talukEntry) {
+                                  String talukName = talukEntry.key;
+                                  List<dynamic> talukAreas = talukEntry.value;
+
+                                  final talukObj = _firstWhereOrNull(
+                                    taluks,
+                                    (t) => t['name'] == talukName && t['district_id'].toString() == districtObj?['id']?.toString(),
+                                  );
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(left: 16.0),
+                                    child: ExpansionTile(
+                                      leading: const Icon(Icons.location_on_outlined, color: Colors.teal),
+                                      title: Row(
+                                        children: [
+                                          Expanded(child: Text(talukName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                                          if (talukObj != null) ...[
+                                            IconButton(
+                                              icon: const Icon(Icons.edit, color: Colors.teal, size: 16),
+                                              onPressed: () => _showEditTalukDialog(talukObj),
+                                            ),
+                                            IconButton(
+                                              tooltip: 'Delete Taluk',
+                                              icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                              onPressed: () => _deleteTaluk(talukObj),
+                                            ),
+                                          ]
+                                        ],
                                       ),
-                                      IconButton(
-                                        tooltip: 'Delete Area',
-                                        icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                        onPressed: () => _deleteArea(area),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
+                                      children: talukAreas.isEmpty
+                                        ? [const Padding(padding: EdgeInsets.only(left: 54.0, bottom: 16.0), child: Align(alignment: Alignment.centerLeft, child: Text('No areas added yet', style: TextStyle(color: Colors.grey))))]
+                                        : talukAreas.map((area) {
+                                        String parentDisplay = area['block'] ?? '-';
+                                        if (area['area_type'] == 'GRAM_PANCHAYAT') {
+                                          final t = talukMap[area['taluk_id']?.toString()];
+                                          parentDisplay = t?['name'] ?? '-';
+                                        }
+                                        if (parentDisplay.isEmpty) parentDisplay = '-';
+
+                                        return ListTile(
+                                          contentPadding: const EdgeInsets.only(left: 54.0, right: 16.0),
+                                          leading: const Icon(Icons.map_outlined, size: 18, color: Colors.grey),
+                                          title: Text('${area['village_or_ward'] ?? "Unnamed Area"} (${area['area_type'] ?? "Area"})', style: const TextStyle(fontSize: 13)),
+                                          subtitle: Text('Parent: $parentDisplay', style: const TextStyle(fontSize: 11)),
+                                          trailing: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(Icons.edit, color: Colors.teal, size: 18),
+                                                onPressed: () => _showEditAreaDialog(area),
+                                              ),
+                                              IconButton(
+                                                tooltip: 'Delete Area',
+                                                icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                                                onPressed: () => _deleteArea(area),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  );
+                                }).toList(),
                             ),
                           );
                         }).toList(),

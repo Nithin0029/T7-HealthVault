@@ -17,7 +17,7 @@ class LocalDbService {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -37,7 +37,7 @@ class LocalDbService {
         await db.execute('''
           CREATE TABLE states(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT
+            name TEXT UNIQUE
           )
         ''');
 
@@ -50,11 +50,21 @@ class LocalDbService {
         ''');
 
         await db.execute('''
+          CREATE TABLE taluks(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            district_id INTEGER,
+            name TEXT
+          )
+        ''');
+
+        await db.execute('''
           CREATE TABLE areas(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             district_id INTEGER,
+            taluk_id INTEGER,
             block TEXT,
-            village_or_ward TEXT
+            village_or_ward TEXT,
+            area_type TEXT
           )
         ''');
 
@@ -113,6 +123,8 @@ class LocalDbService {
           'first_name': 'Admin',
           'last_name': 'System',
         });
+
+        await _seedInitialData(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -129,12 +141,218 @@ class LocalDbService {
             // Ignore if column already exists
           }
         }
+        if (oldVersion < 4) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS taluks(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                district_id INTEGER,
+                name TEXT
+              )
+            ''');
+            await db.execute('ALTER TABLE areas ADD COLUMN taluk_id INTEGER');
+          } catch (e) {
+            // Ignore if errors occur during column addition
+          }
+        }
+        if (oldVersion < 5) {
+          try {
+            await db.execute('ALTER TABLE areas ADD COLUMN area_type TEXT');
+          } catch (e) {
+            // Ignore
+          }
+          await _seedInitialData(db);
+        }
         // Repair/sanitize any legacy oversized base64 images that caused CursorWindow errors
         try {
           await db.execute('UPDATE users SET profile_image = NULL WHERE length(profile_image) > 150000');
         } catch (_) {}
       },
     );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Seeding Logic (Real Government Data)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  static Future<void> _seedInitialData(Database db) async {
+    // 1. Seed State: Karnataka
+    int stateId;
+    final List<Map<String, dynamic>> existingStates = await db.query('states', where: 'name = ?', whereArgs: ['Karnataka']);
+    if (existingStates.isEmpty) {
+      stateId = await db.insert('states', {'name': 'Karnataka'});
+    } else {
+      stateId = existingStates.first['id'] as int;
+    }
+
+    // 2. Seed Districts
+    // Sources: https://bengaluruurban.nic.in/, https://bengalurural.nic.in/, https://kolar.nic.in/
+    final districts = ['Bengaluru Urban', 'Bengaluru Rural', 'Kolar'];
+    Map<String, int> districtIds = {};
+    for (var dName in districts) {
+      final List<Map<String, dynamic>> existing = await db.query('districts', where: 'name = ? AND state_id = ?', whereArgs: [dName, stateId]);
+      if (existing.isEmpty) {
+        districtIds[dName] = await db.insert('districts', {'state_id': stateId, 'name': dName});
+      } else {
+        districtIds[dName] = existing.first['id'] as int;
+      }
+    }
+
+    // 3. Seed Taluks
+    final talukData = {
+      'Bengaluru Urban': ['Bengaluru North', 'Bengaluru North (Additional)', 'Bengaluru South', 'Bengaluru East', 'Anekal'],
+      'Bengaluru Rural': ['Devanahalli', 'Doddaballapura', 'Hosakote', 'Nelamangala'],
+      'Kolar': ['Bangarpet', 'KGF', 'Kolar', 'Malur', 'Mulbagal', 'Srinivasapura'],
+    };
+
+    Map<String, int> talukIds = {};
+    for (var dName in talukData.keys) {
+      int dId = districtIds[dName]!;
+      final tNames = talukData[dName]!;
+      for (var tName in tNames) {
+        final List<Map<String, dynamic>> existing = await db.query('taluks', where: 'name = ? AND district_id = ?', whereArgs: [tName, dId]);
+        if (existing.isEmpty) {
+          talukIds['$dId-$tName'] = await db.insert('taluks', {'district_id': dId, 'name': tName});
+        } else {
+          talukIds['$dId-$tName'] = existing.first['id'] as int;
+        }
+      }
+    }
+
+    // 4. Seed Verified Areas (Wards, GPs, Localities, Villages)
+    // Hierarchy Urban: District -> Taluk -> Urban Ward -> Locality
+    // Hierarchy Rural: District -> Taluk -> Gram Panchayat -> Village
+    
+    final verifiedAreas = [
+      // Bengaluru Urban - Bengaluru East - Ward 109 Localities
+      {'d': 'Bengaluru Urban', 't': 'Bengaluru East', 'type': 'LOCALITY', 'p': 'Ward 109 — AECS Layout', 'v': 'Kundalahalli Colony'},
+      {'d': 'Bengaluru Urban', 't': 'Bengaluru East', 'type': 'LOCALITY', 'p': 'Ward 109 — AECS Layout', 'v': 'AECS Layout'},
+      {'d': 'Bengaluru Urban', 't': 'Bengaluru East', 'type': 'LOCALITY', 'p': 'Ward 109 — AECS Layout', 'v': 'Hanuma Reddy Layout'},
+      {'d': 'Bengaluru Urban', 't': 'Bengaluru East', 'type': 'LOCALITY', 'p': 'Ward 109 — AECS Layout', 'v': 'Channappanahalli'},
+      {'d': 'Bengaluru Urban', 't': 'Bengaluru East', 'type': 'LOCALITY', 'p': 'Ward 109 — AECS Layout', 'v': 'Lakshminarayanapura'},
+      {'d': 'Bengaluru Urban', 't': 'Bengaluru East', 'type': 'LOCALITY', 'p': 'Ward 109 — AECS Layout', 'v': 'Ashwath Nagar'},
+      {'d': 'Bengaluru Urban', 't': 'Bengaluru East', 'type': 'LOCALITY', 'p': 'Ward 109 — AECS Layout', 'v': 'Hemanth Nagar'},
+
+      // Bengaluru Rural - Devanahalli Gram Panchayats
+      {'d': 'Bengaluru Rural', 't': 'Devanahalli', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': 'Kundana'},
+      {'d': 'Bengaluru Rural', 't': 'Devanahalli', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': 'Mandibele'},
+      {'d': 'Bengaluru Rural', 't': 'Devanahalli', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': 'Koramangala'},
+
+      // Bengaluru Rural - Nelamangala Gram Panchayats
+      {'d': 'Bengaluru Rural', 't': 'Nelamangala', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': 'Agalakuppe'},
+      {'d': 'Bengaluru Rural', 't': 'Nelamangala', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': 'Arebommanahalli'},
+      {'d': 'Bengaluru Rural', 't': 'Nelamangala', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': 'Boodihal'},
+      {'d': 'Bengaluru Rural', 't': 'Nelamangala', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': 'Doddabele'},
+      {'d': 'Bengaluru Rural', 't': 'Nelamangala', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': 'Gollahalli'},
+      {'d': 'Bengaluru Rural', 't': 'Nelamangala', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': 'Hasiruvalli'},
+
+      // Kolar - Kolar Taluk Gram Panchayats (34)
+      ...['Ammanallur', 'Annenahalli', 'Arabhikothanur', 'Arahalli', 'Beglihosahalli', 'Belamaranahalli', 'Bellur', 'Channasandra', 'Chowdadenahalli', 'Doddahasala', 'Harati', 'Holur', 'Honnenahalli', 'Huttur', 'Ithrasanahally', 'Jannagatta', 'Kondarajanahalli', 'Kyalanur', 'Madanahalli', 'Madderi', 'Marjenahalli', 'Mudavadi', 'Muduvathi', 'Narasapura', 'Seethi', 'Settihalli', 'Shapuru', 'Soolur', 'Sugatur', 'Thoradevandahalli', 'Thotli', 'Uragali', 'Vadaguru', 'Vokkaleri']
+          .map((v) => {'d': 'Kolar', 't': 'Kolar', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': v}),
+
+      // Kolar - Malur Gram Panchayats (28)
+      ...['Abbenahalli', 'Araleri', 'Baliganahalli', 'Banahalli', 'Chikkakunthur', 'Chikkathirupathi', 'D.N.Doddi', 'Dinnehalli', 'Doddashivara', 'Hasandahalli', 'Huladenahalli', 'Hulimangala Hosakote', 'Hungenahalli', 'Jayamangala', 'K.G.Halli', 'Kondasettihalli', 'Kudiyanur', 'Lakkur', 'Madivala', 'Masti', 'Nosagere', 'Nutave', 'Rajenahalli', 'Santehalli', 'Shivarapatna', 'Takel', 'Thornahalli', 'Trunasi']
+          .map((v) => {'d': 'Kolar', 't': 'Malur', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': v}),
+
+      // Kolar - Bangarpet Gram Panchayats (21)
+      ...['Alambadi Jothenahalli', 'Balamande', 'Boodikote', 'Chikka Ankandahalli', 'Chinnakote', 'Dhonimadagu', 'Doddavalagamadi', 'Doddurukarapanahalli', 'Gullahalli', 'Hulibele', 'Hunkunda', 'Iynorahosahalli', 'Kamasamudra', 'Karahalli', 'Kesaranahalli', 'Kethaganahalli', 'Magondi', 'Mavahalli', 'Soolikunte', 'Thoppanahalli', 'Yalesandra']
+          .map((v) => {'d': 'Kolar', 't': 'Bangarpet', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': v}),
+
+      // Kolar - KGF Gram Panchayats (16)
+      ...['Bethamangala', 'Ghattakamadenahalli', 'Ghattadamadamangala', 'Hulkuru', 'Jakkarasanakuppa', 'Kammasandra', 'Kangandlahalli', 'Kyasamballi', 'Marikuppa', 'N.G.Hulkur', 'Parandahalli', 'Ramasagara', 'Srinivasasandra', 'Sundarapalya', 'T.Gollahalli', 'Vengasandra']
+          .map((v) => {'d': 'Kolar', 't': 'KGF', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': v}),
+
+      // Kolar - Mulbagal Gram Panchayats (30)
+      ...['Aavani', 'Agara', 'Alangur', 'Ambikallu', 'Angondahalli', 'Balla', 'Byrakur', 'Devarayasamudra', 'Dhulappalli', 'Emmenatha', 'Gudipalli', 'Gummakallu', 'H.Gollahalli', 'Hanumanahalli', 'Hebbani', 'Kappalamadagu', 'Kurudamale', 'Mallanayakanahalli', 'Mothakapalli', 'Mudigere', 'Mudiyanur', 'Mushtur', 'Nangali', 'Pichhaguntlahalli', 'Rajendrahalli', 'Sonnavadi', 'Tayalur', 'Thimmaravutanahalli', 'Urukunte Mittur', 'Uthanur']
+          .map((v) => {'d': 'Kolar', 't': 'Mulbagal', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': v}),
+
+      // Kolar - Srinivasapura Gram Panchayats (25)
+      ...['Addagal', 'Arikunte', 'Byraganahalli', 'Chaldiganahalli', 'Dalasanur', 'Gownipalli', 'Hodali', 'J.Thimmasandra', 'Kodipalli', 'Kolathur', 'Koorigepalli', 'Lakshmisagara', 'Lakshmipur', 'Mastenahalli', 'Mudimadagu', 'Muthakapalli', 'Nambihalli', 'Nelavanki', 'Pulagurukota', 'Raylapadu', 'Ronur', 'Somayajalapalli', 'Thadigol', 'Yaldur', 'Yarramvaripalli']
+          .map((v) => {'d': 'Kolar', 't': 'Srinivasapura', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': v}),
+    ];
+
+    Map<String, int> areaIdsMap = {};
+    for (var area in verifiedAreas) {
+      int dId = districtIds[area['d']]!;
+      int tId = talukIds['$dId-${area['t']}'] ?? 0;
+      if (tId == 0) continue;
+
+      final List<Map<String, dynamic>> existing = await db.query('areas', 
+          where: 'village_or_ward = ? AND taluk_id = ?', whereArgs: [area['v'], tId]);
+      if (existing.isEmpty) {
+        areaIdsMap[area['v']!] = await db.insert('areas', {
+          'district_id': dId,
+          'taluk_id': tId,
+          'block': area['p'],
+          'village_or_ward': area['v'],
+          'area_type': area['type'],
+        });
+      } else {
+        areaIdsMap[area['v']!] = existing.first['id'] as int;
+      }
+    }
+
+    // 5. Seed Demo ASHA Users (Mapped to Real Locations)
+    final demoUsers = [
+      {'un': 'asha_001', 'fn': 'Demo ASHA', 'ln': 'Bengaluru', 'ph': '555-0101', 'area': 'Kundalahalli Colony'},
+      {'un': 'asha_002', 'fn': 'Demo ASHA', 'ln': 'Bengaluru Rural', 'ph': '555-0202', 'area': 'Kundana'},
+      {'un': 'asha_003', 'fn': 'Demo ASHA', 'ln': 'Kolar', 'ph': '555-0303', 'area': 'Masti'},
+    ];
+
+    for (var u in demoUsers) {
+      final List<Map<String, dynamic>> existing = await db.query('users', where: 'username = ?', whereArgs: [u['un']]);
+      int uId;
+      if (existing.isEmpty) {
+        uId = await db.insert('users', {
+          'username': u['un'],
+          'password': 'password123',
+          'first_name': u['fn'],
+          'last_name': u['ln'],
+          'phone_number': u['ph'],
+          'aadhaar_number': '0000-0000-0000',
+          'role': 'asha',
+          'state': stateId.toString(),
+        });
+      } else {
+        uId = existing.first['id'] as int;
+      }
+
+      // Assign Area
+      int aId = areaIdsMap[u['area']] ?? 0;
+      if (aId != 0) {
+        final List<Map<String, dynamic>> existingAssignment = await db.query('user_areas', 
+            where: 'user_id = ? AND area_id = ?', whereArgs: [uId, aId]);
+        if (existingAssignment.isEmpty) {
+          await db.insert('user_areas', {'user_id': uId, 'area_id': aId});
+        }
+      }
+    }
+
+    // 6. Seed Demo Families (Mapped to Real Locations)
+    final demoFamilies = [
+      {'name': 'Family 001 (Demo)', 'house': 'H-101', 'area': 'Kundalahalli Colony'},
+      {'name': 'Family 002 (Demo)', 'house': 'R-202', 'area': 'Kundana'},
+      {'name': 'Family 003 (Demo)', 'house': 'K-303', 'area': 'Masti'},
+    ];
+
+    for (var f in demoFamilies) {
+      int aId = areaIdsMap[f['area']] ?? 0;
+      if (aId == 0) continue;
+
+      final List<Map<String, dynamic>> existing = await db.query('families', 
+          where: 'family_head_name = ? AND area_id = ?', whereArgs: [f['name'], aId]);
+      if (existing.isEmpty) {
+        await db.insert('families', {
+          'family_head_name': f['name'],
+          'house_number': f['house'],
+          'contact_number': '99999-88888',
+          'area_id': aId,
+        });
+      }
+    }
+
+    // Clean up old demo data from previous seedings if it exists
+    await db.delete('areas', where: "village_or_ward LIKE '%Demo Area A%'");
   }
 
   // Generate fake local token based on user ID
@@ -183,12 +401,13 @@ class LocalDbService {
 
   static Future<Map<String, dynamic>> _buildUserPayload(Map<String, dynamic> user) async {
     final db = await database;
-    // Fetch assigned areas with their details and district name
+    // Fetch assigned areas with their details, district name, taluk name, and area type
     final areaMaps = await db.rawQuery('''
-      SELECT a.id, a.block, a.village_or_ward, d.name as district_name
+      SELECT a.id, a.block, a.village_or_ward, a.area_type, d.name as district_name, t.name as taluk_name
       FROM areas a 
       JOIN user_areas ua ON a.id = ua.area_id 
       LEFT JOIN districts d ON a.district_id = d.id
+      LEFT JOIN taluks t ON a.taluk_id = t.id
       WHERE ua.user_id = ?
       ORDER BY a.village_or_ward ASC
     ''', [user['id']]);
@@ -197,7 +416,9 @@ class LocalDbService {
       'id': e['id'],
       'block': e['block'],
       'village_or_ward': e['village_or_ward'],
+      'area_type': e['area_type'],
       'district_name': e['district_name'],
+      'taluk_name': e['taluk_name'],
     }).toList();
 
     final districtNames = areaMaps.map((e) => e['district_name']?.toString() ?? 'N/A').toSet().toList();
@@ -522,6 +743,11 @@ class LocalDbService {
     return await db.query('districts', orderBy: 'name ASC');
   }
 
+  static Future<List<dynamic>> getTaluks(String token) async {
+    final db = await database;
+    return await db.query('taluks', orderBy: 'name ASC');
+  }
+
   static Future<List<dynamic>> getAreas(String token) async {
     final db = await database;
     return await db.query('areas', orderBy: 'block ASC, village_or_ward ASC');
@@ -539,12 +765,20 @@ class LocalDbService {
     return true;
   }
 
-  static Future<bool> addArea(String token, String districtId, String block, String villageOrWard) async {
+  static Future<bool> addTaluk(String token, String districtId, String name) async {
+    final db = await database;
+    await db.insert('taluks', {'district_id': int.parse(districtId), 'name': name});
+    return true;
+  }
+
+  static Future<bool> addArea(String token, String districtId, String talukId, String block, String villageOrWard, String type) async {
     final db = await database;
     await db.insert('areas', {
       'district_id': int.parse(districtId),
+      'taluk_id': int.parse(talukId),
       'block': block,
       'village_or_ward': villageOrWard,
+      'area_type': type,
     });
     return true;
   }
@@ -561,12 +795,20 @@ class LocalDbService {
     return true;
   }
 
-  static Future<bool> editArea(String token, String areaId, String districtId, String block, String villageOrWard) async {
+  static Future<bool> editTaluk(String token, String talukId, String districtId, String name) async {
+    final db = await database;
+    await db.update('taluks', {'district_id': int.parse(districtId), 'name': name}, where: 'id = ?', whereArgs: [int.parse(talukId)]);
+    return true;
+  }
+
+  static Future<bool> editArea(String token, String areaId, String districtId, String talukId, String block, String villageOrWard, String type) async {
     final db = await database;
     await db.update('areas', {
       'district_id': int.parse(districtId),
+      'taluk_id': int.parse(talukId),
       'block': block,
       'village_or_ward': villageOrWard,
+      'area_type': type,
     }, where: 'id = ?', whereArgs: [int.parse(areaId)]);
     return true;
   }
@@ -580,6 +822,12 @@ class LocalDbService {
   static Future<bool> deleteDistrict(String token, String districtId) async {
     final db = await database;
     await db.delete('districts', where: 'id = ?', whereArgs: [int.parse(districtId)]);
+    return true;
+  }
+
+  static Future<bool> deleteTaluk(String token, String talukId) async {
+    final db = await database;
+    await db.delete('taluks', where: 'id = ?', whereArgs: [int.parse(talukId)]);
     return true;
   }
 

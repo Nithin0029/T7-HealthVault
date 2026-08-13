@@ -86,7 +86,7 @@ class _ASHAHomeScreenState extends State<ASHAHomeScreen> {
                   items: assignedAreas.map<DropdownMenuItem<String>>((a) {
                     return DropdownMenuItem<String>(
                       value: a['id'].toString(),
-                      child: Text('${a['village_or_ward']} (Block: ${a['block']})'),
+                      child: Text('${a['village_or_ward']} (${a['area_type'] ?? a['taluk_name'] ?? 'Area'})'),
                     );
                   }).toList(),
                   onChanged: (val) {
