@@ -44,3 +44,24 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Artifacts & Persisted State
+.artifacts/
+
+# Additional Flutter/Dart ignores
+.flutter-plugins
+.packages
+.env
+.env.*
+*.db
+*.sqlite
+healthvault.db
+
+# Generated code
+**/*.pbenv.dart
+**/*.pbserver.dart
+**/*.pbjson.dart
+**/*.pb.dart
+**/*.g.dart
+**/*.freezed.dart
+
