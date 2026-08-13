@@ -41,6 +41,9 @@ dependencies:
   path: ^1.9.1
   file_picker: ^11.0.2
   image_picker: ^1.1.2
+  excel: ^4.0.5
+  device_info_plus: ^10.1.0
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:

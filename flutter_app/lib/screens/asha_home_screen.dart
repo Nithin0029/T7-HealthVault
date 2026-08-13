@@ -1,8 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/local_db_service.dart';
 import '../services/image_utils.dart';
 import 'login_screen.dart';
 import 'family_detail_screen.dart';
+import '../services/excel_export_service.dart';
 
 class ASHAHomeScreen extends StatefulWidget {
   final String token;
@@ -17,6 +22,7 @@ class ASHAHomeScreen extends StatefulWidget {
 class _ASHAHomeScreenState extends State<ASHAHomeScreen> {
   late Future<List<dynamic>> _familiesFuture;
   int _currentIndex = 0;
+  bool _isExporting = false;
 
   @override
   void initState() {
@@ -28,6 +34,76 @@ class _ASHAHomeScreenState extends State<ASHAHomeScreen> {
     setState(() {
       _familiesFuture = LocalDbService.getFamilies(widget.token);
     });
+  }
+
+  void _handleExport() async {
+    setState(() => _isExporting = true);
+    try {
+      final userId = widget.user['id'] as int;
+      final data = await LocalDbService.getExportData(userId);
+
+      if (data['profile'] == null || data['profile']!.isEmpty) {
+        throw Exception('User profile not found.');
+      }
+
+      final report = await ExcelExportService.generateReport(
+        profile: data['profile']!.first,
+        families: data['families']!,
+        members: data['members']!,
+        records: data['records']!,
+      );
+
+      final String fileName = report['fileName'];
+      final Uint8List bytes = report['bytes'];
+
+      // Request permissions for legacy Android
+      if (Platform.isAndroid) {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        if (androidInfo.version.sdkInt <= 28) {
+          final status = await Permission.storage.request();
+          if (!status.isGranted) {
+            throw Exception('Storage permission is required to save the file.');
+          }
+        }
+      }
+
+      // Call Native MethodChannel to save to public Downloads
+      const platform = MethodChannel('com.example.healthvault/download');
+      final bool success = await platform.invokeMethod('saveToDownloads', {
+        'fileName': fileName,
+        'bytes': bytes,
+      });
+
+      if (!mounted) return;
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Health report downloaded successfully!', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('Location: Downloads/$fileName.xlsx', style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+            backgroundColor: const Color(0xFF00796B),
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        throw Exception('Failed to save file to public Downloads folder.');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
   }
 
   void _showAddFamilyDialog() {
@@ -361,6 +437,26 @@ class _ASHAHomeScreenState extends State<ASHAHomeScreen> {
                 ),
             ],
           ),
+          const SizedBox(height: 32),
+
+          // Export Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00796B),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: _isExporting ? null : _handleExport,
+              icon: _isExporting
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.description_outlined),
+              label: Text(_isExporting ? 'Generating Report...' : 'Generate Health Report (Excel)'),
+            ),
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );

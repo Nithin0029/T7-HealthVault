@@ -634,7 +634,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedDistrictId,
+                    initialValue: selectedDistrictId,
                     decoration: const InputDecoration(labelText: 'Select District'),
                     items: districts
                         .where((d) => d['state_id'].toString() == selectedStateId)
@@ -654,7 +654,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedTalukId,
+                    initialValue: selectedTalukId,
                     decoration: const InputDecoration(labelText: 'Select Taluk'),
                     items: taluks
                         .where((t) => t['district_id'].toString() == selectedDistrictId)
@@ -669,7 +669,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedAreaType,
+                    initialValue: selectedAreaType,
                     decoration: const InputDecoration(labelText: 'Area Type'),
                     items: const [
                       DropdownMenuItem(value: 'GRAM_PANCHAYAT', child: Text('Gram Panchayat')),
@@ -833,7 +833,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: selectedDistrictId,
+                  initialValue: selectedDistrictId,
                   decoration: const InputDecoration(labelText: 'Select District'),
                   items: districts
                       .where((d) => d['state_id'].toString() == selectedStateId)
@@ -1097,7 +1097,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedDistrictId,
+                    initialValue: selectedDistrictId,
                     decoration: const InputDecoration(labelText: 'Select District'),
                     items: districts
                         .where((d) => d['state_id'].toString() == selectedStateId)
@@ -1117,7 +1117,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedTalukId,
+                    initialValue: selectedTalukId,
                     decoration: const InputDecoration(labelText: 'Select Taluk'),
                     items: taluks
                         .where((t) => t['district_id'].toString() == selectedDistrictId)
@@ -1132,7 +1132,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedAreaType,
+                    initialValue: selectedAreaType,
                     decoration: const InputDecoration(labelText: 'Area Type'),
                     items: const [
                       DropdownMenuItem(value: 'GRAM_PANCHAYAT', child: Text('Gram Panchayat')),

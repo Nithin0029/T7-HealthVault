@@ -944,4 +944,72 @@ class LocalDbService {
     await db.delete('user_areas', where: 'user_id = ?', whereArgs: [uId]);
     return true;
   }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Export Logic
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  static Future<Map<String, List<Map<String, dynamic>>>> getExportData(int userId) async {
+    final db = await database;
+
+    // 1. Fetch User Profile & Aggregated Geography
+    final userList = await db.rawQuery('''
+      SELECT u.username, u.first_name, u.last_name, u.phone_number, u.aadhaar_number, 
+             s.name as state_name,
+             GROUP_CONCAT(DISTINCT d.name) as district_names,
+             GROUP_CONCAT(DISTINCT t.name) as taluk_names,
+             GROUP_CONCAT(DISTINCT a.village_or_ward) as area_names
+      FROM users u
+      LEFT JOIN states s ON u.state = s.id
+      LEFT JOIN user_areas ua ON u.id = ua.user_id
+      LEFT JOIN areas a ON ua.area_id = a.id
+      LEFT JOIN taluks t ON a.taluk_id = t.id
+      LEFT JOIN districts d ON a.district_id = d.id
+      WHERE u.id = ?
+      GROUP BY u.id
+    ''', [userId]);
+    
+    // 2. Fetch Authorized Families with full geography
+    final families = await db.rawQuery('''
+      SELECT f.id, s.name as state_name, d.name as district_name, t.name as taluk_name, 
+             a.village_or_ward as area_name, a.area_type, f.family_head_name, f.house_number, f.contact_number
+      FROM families f
+      JOIN areas a ON f.area_id = a.id
+      JOIN taluks t ON a.taluk_id = t.id
+      JOIN districts d ON a.district_id = d.id
+      JOIN states s ON d.state_id = s.id
+      WHERE f.area_id IN (SELECT area_id FROM user_areas WHERE user_id = ?)
+      ORDER BY s.name ASC, d.name ASC, t.name ASC, a.village_or_ward ASC, f.family_head_name ASC
+    ''', [userId]);
+
+    // 3. Fetch Members with Family Head
+    final members = await db.rawQuery('''
+      SELECT f.id as family_id, f.family_head_name, m.id as member_id, m.full_name as member_name, 
+             m.age, m.gender, m.relationship_to_head
+      FROM members m
+      JOIN families f ON m.family_id = f.id
+      WHERE f.area_id IN (SELECT area_id FROM user_areas WHERE user_id = ?)
+      ORDER BY f.family_head_name ASC, m.full_name ASC
+    ''', [userId]);
+
+    // 4. Fetch Medical Records with Family & Member details
+    final records = await db.rawQuery('''
+      SELECT f.id as family_id, f.family_head_name, m.id as member_id, m.full_name as member_name, 
+             r.id as record_id, r.recorded_at, r.blood_pressure_systolic, r.blood_pressure_diastolic, 
+             r.blood_sugar_fasting, r.blood_sugar_postprandial, r.temperature, r.pulse_rate, 
+             r.entry_source, r.notes
+      FROM medical_records r
+      JOIN members m ON r.member_id = m.id
+      JOIN families f ON m.family_id = f.id
+      WHERE f.area_id IN (SELECT area_id FROM user_areas WHERE user_id = ?)
+      ORDER BY r.recorded_at DESC
+    ''', [userId]);
+
+    return {
+      'profile': userList.map((e) => Map<String, dynamic>.from(e)).toList(),
+      'families': families.map((e) => Map<String, dynamic>.from(e)).toList(),
+      'members': members.map((e) => Map<String, dynamic>.from(e)).toList(),
+      'records': records.map((e) => Map<String, dynamic>.from(e)).toList(),
+    };
+  }
 }
