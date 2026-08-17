@@ -17,7 +17,7 @@ class LocalDbService {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -161,6 +161,14 @@ class LocalDbService {
           } catch (e) {
             // Ignore
           }
+        }
+        if (oldVersion < 6) {
+          // One-time cleanup of all demo operational data
+          await db.delete('users', where: "role = 'asha'");
+          await db.delete('user_areas');
+          await db.delete('families');
+          await db.delete('members');
+          await db.delete('medical_records');
           await _seedInitialData(db);
         }
         // Repair/sanitize any legacy oversized base64 images that caused CursorWindow errors
@@ -271,7 +279,6 @@ class LocalDbService {
           .map((v) => {'d': 'Kolar', 't': 'Srinivasapura', 'type': 'GRAM_PANCHAYAT', 'p': '', 'v': v}),
     ];
 
-    Map<String, int> areaIdsMap = {};
     for (var area in verifiedAreas) {
       int dId = districtIds[area['d']]!;
       int tId = talukIds['$dId-${area['t']}'] ?? 0;
@@ -280,79 +287,15 @@ class LocalDbService {
       final List<Map<String, dynamic>> existing = await db.query('areas', 
           where: 'village_or_ward = ? AND taluk_id = ?', whereArgs: [area['v'], tId]);
       if (existing.isEmpty) {
-        areaIdsMap[area['v']!] = await db.insert('areas', {
+        await db.insert('areas', {
           'district_id': dId,
           'taluk_id': tId,
           'block': area['p'],
           'village_or_ward': area['v'],
           'area_type': area['type'],
         });
-      } else {
-        areaIdsMap[area['v']!] = existing.first['id'] as int;
       }
     }
-
-    // 5. Seed Demo ASHA Users (Mapped to Real Locations)
-    final demoUsers = [
-      {'un': 'asha_001', 'fn': 'Demo ASHA', 'ln': 'Bengaluru', 'ph': '555-0101', 'area': 'Kundalahalli Colony'},
-      {'un': 'asha_002', 'fn': 'Demo ASHA', 'ln': 'Bengaluru Rural', 'ph': '555-0202', 'area': 'Kundana'},
-      {'un': 'asha_003', 'fn': 'Demo ASHA', 'ln': 'Kolar', 'ph': '555-0303', 'area': 'Masti'},
-    ];
-
-    for (var u in demoUsers) {
-      final List<Map<String, dynamic>> existing = await db.query('users', where: 'username = ?', whereArgs: [u['un']]);
-      int uId;
-      if (existing.isEmpty) {
-        uId = await db.insert('users', {
-          'username': u['un'],
-          'password': 'password123',
-          'first_name': u['fn'],
-          'last_name': u['ln'],
-          'phone_number': u['ph'],
-          'aadhaar_number': '0000-0000-0000',
-          'role': 'asha',
-          'state': stateId.toString(),
-        });
-      } else {
-        uId = existing.first['id'] as int;
-      }
-
-      // Assign Area
-      int aId = areaIdsMap[u['area']] ?? 0;
-      if (aId != 0) {
-        final List<Map<String, dynamic>> existingAssignment = await db.query('user_areas', 
-            where: 'user_id = ? AND area_id = ?', whereArgs: [uId, aId]);
-        if (existingAssignment.isEmpty) {
-          await db.insert('user_areas', {'user_id': uId, 'area_id': aId});
-        }
-      }
-    }
-
-    // 6. Seed Demo Families (Mapped to Real Locations)
-    final demoFamilies = [
-      {'name': 'Family 001 (Demo)', 'house': 'H-101', 'area': 'Kundalahalli Colony'},
-      {'name': 'Family 002 (Demo)', 'house': 'R-202', 'area': 'Kundana'},
-      {'name': 'Family 003 (Demo)', 'house': 'K-303', 'area': 'Masti'},
-    ];
-
-    for (var f in demoFamilies) {
-      int aId = areaIdsMap[f['area']] ?? 0;
-      if (aId == 0) continue;
-
-      final List<Map<String, dynamic>> existing = await db.query('families', 
-          where: 'family_head_name = ? AND area_id = ?', whereArgs: [f['name'], aId]);
-      if (existing.isEmpty) {
-        await db.insert('families', {
-          'family_head_name': f['name'],
-          'house_number': f['house'],
-          'contact_number': '99999-88888',
-          'area_id': aId,
-        });
-      }
-    }
-
-    // Clean up old demo data from previous seedings if it exists
-    await db.delete('areas', where: "village_or_ward LIKE '%Demo Area A%'");
   }
 
   // Generate fake local token based on user ID
