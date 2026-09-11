@@ -439,6 +439,42 @@ class LocalDbService {
     return true;
   }
 
+  static Future<bool> updateFamily(String token, String familyId, String headName, String houseNo, String contactNo) async {
+    final db = await database;
+    await db.update(
+      'families',
+      {
+        'family_head_name': headName,
+        'house_number': houseNo,
+        'contact_number': contactNo,
+      },
+      where: 'id = ?',
+      whereArgs: [int.parse(familyId)],
+    );
+    return true;
+  }
+
+  static Future<bool> deleteFamily(String token, String familyId) async {
+    final db = await database;
+    final fId = int.parse(familyId);
+    
+    // 1. Get all members of this family
+    final members = await db.query('members', where: 'family_id = ?', whereArgs: [fId]);
+    for (var m in members) {
+      final mId = m['id'] as int;
+      // 2. Delete medical records for each member
+      await db.delete('medical_records', where: 'member_id = ?', whereArgs: [mId]);
+    }
+    
+    // 3. Delete members
+    await db.delete('members', where: 'family_id = ?', whereArgs: [fId]);
+    
+    // 4. Delete family
+    await db.delete('families', where: 'id = ?', whereArgs: [fId]);
+    
+    return true;
+  }
+
   static Future<List<dynamic>> getMembers(String token) async {
     final db = await database;
     final List<Map<String, dynamic>> members = await db.query('members', orderBy: 'full_name ASC');
@@ -511,6 +547,16 @@ class LocalDbService {
       values['profile_image'] = profileImage;
     }
     await db.update('members', values, where: 'id = ?', whereArgs: [int.parse(memberId)]);
+    return true;
+  }
+
+  static Future<bool> deleteMember(String token, String memberId) async {
+    final db = await database;
+    final mId = int.parse(memberId);
+    // 1. Delete medical records
+    await db.delete('medical_records', where: 'member_id = ?', whereArgs: [mId]);
+    // 2. Delete member
+    await db.delete('members', where: 'id = ?', whereArgs: [mId]);
     return true;
   }
 

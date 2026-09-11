@@ -130,6 +130,138 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     );
   }
 
+    );
+  }
+
+    );
+  }
+
+  void _showEditMemberDialog(Map<String, dynamic> member) {
+    final nameCtrl = TextEditingController(text: member['full_name']);
+    final ageCtrl = TextEditingController(text: member['age'].toString());
+    final relCtrl = TextEditingController(text: member['relationship_to_head']);
+    String gender = member['gender']?.toString().toLowerCase() ?? 'male';
+    if (gender != 'male' && gender != 'female' && gender != 'other') gender = 'male';
+    String? pickedImageBase64 = member['profile_image']?.toString();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.edit, color: Color(0xFF00796B)),
+              SizedBox(width: 8),
+              Text('Edit Family Member'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () async {
+                    final compressedBase64 = await ImageUtils.pickAndCompressImage(context);
+                    if (compressedBase64 != null) {
+                      setModalState(() {
+                        pickedImageBase64 = compressedBase64;
+                      });
+                    }
+                  },
+                  child: CircleAvatar(
+                    radius: 36,
+                    backgroundColor: Colors.teal.shade50,
+                    backgroundImage: ImageUtils.safeBase64Image(pickedImageBase64),
+                    child: pickedImageBase64 == null
+                        ? const Icon(Icons.add_a_photo, color: Colors.teal, size: 28)
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  pickedImageBase64 == null ? 'Change Photo (Max 5MB)' : 'Photo Selected',
+                  style: TextStyle(fontSize: 12, color: Colors.teal.shade800, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name')),
+                const SizedBox(height: 12),
+                TextField(controller: ageCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Age')),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: gender,
+                  decoration: const InputDecoration(labelText: 'Gender'),
+                  items: const [
+                    DropdownMenuItem(value: 'male', child: Text('Male')),
+                    DropdownMenuItem(value: 'female', child: Text('Female')),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setModalState(() => gender = val);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: relCtrl, decoration: const InputDecoration(labelText: 'Relationship to Head')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameCtrl.text.isNotEmpty && ageCtrl.text.isNotEmpty && relCtrl.text.isNotEmpty) {
+                  final age = int.tryParse(ageCtrl.text) ?? 0;
+                  final ok = await LocalDbService.updateMember(
+                    token: widget.token,
+                    memberId: member['id'].toString(),
+                    fullName: nameCtrl.text,
+                    age: age,
+                    gender: gender,
+                    relationship: relCtrl.text,
+                    profileImage: pickedImageBase64,
+                  );
+                  if (!mounted || !context.mounted) return;
+                  Navigator.pop(ctx);
+                  if (ok && context.mounted) {
+                    _refreshMembers();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member updated successfully!')));
+                  }
+                }
+              },
+              child: const Text('Update Member'),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteMember(Map<String, dynamic> member) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Member?'),
+        content: Text('Are you sure you want to delete ${member['full_name']}? This will permanently delete their health history.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              final ok = await LocalDbService.deleteMember(widget.token, member['id'].toString());
+              if (!mounted) return;
+              Navigator.pop(ctx);
+              if (ok) {
+                _refreshMembers();
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member deleted successfully!')));
+              }
+            },
+            child: const Text('Delete'),
+          )
+        ],
+      ),
+    );
+  }
+
   Color _flagColor(String? flag) {
     switch (flag) {
       case 'critical': return Colors.red;
@@ -227,7 +359,31 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                               ),
                           ],
                         ),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (value) async {
+                            if (value == 'open') {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => MemberDetailScreen(
+                                    member: member,
+                                    token: widget.token,
+                                  ),
+                                ),
+                              );
+                              _refreshMembers();
+                            } else if (value == 'edit') {
+                              _showEditMemberDialog(member);
+                            } else if (value == 'delete') {
+                              _confirmDeleteMember(member);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(value: 'open', child: ListTile(leading: Icon(Icons.open_in_new), title: Text('Open'))),
+                            const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit), title: Text('Edit'))),
+                            const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete, color: Colors.red), title: Text('Delete', style: TextStyle(color: Colors.red)))),
+                          ],
+                        ),
                         onTap: () async {
                           await Navigator.push(
                             context,

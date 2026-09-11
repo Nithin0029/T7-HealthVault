@@ -206,6 +206,80 @@ class _ASHAHomeScreenState extends State<ASHAHomeScreen> {
     );
   }
 
+  void _showEditFamilyDialog(Map<String, dynamic> family) {
+    final headNameController = TextEditingController(text: family['family_head_name']);
+    final houseNoController = TextEditingController(text: family['house_number']);
+    final contactController = TextEditingController(text: family['contact_number']);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Family Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: headNameController, decoration: const InputDecoration(labelText: 'Head of Family Name')),
+              const SizedBox(height: 12),
+              TextField(controller: houseNoController, decoration: const InputDecoration(labelText: 'House Number')),
+              const SizedBox(height: 12),
+              TextField(controller: contactController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Contact Number')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (headNameController.text.isNotEmpty && houseNoController.text.isNotEmpty) {
+                final success = await LocalDbService.updateFamily(
+                  widget.token,
+                  family['id'].toString(),
+                  headNameController.text,
+                  houseNoController.text,
+                  contactController.text,
+                );
+                if (!mounted) return;
+                Navigator.pop(context);
+                if (success) {
+                  _refreshFamilies();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Family Updated Successfully!')));
+                }
+              }
+            },
+            child: const Text('Update Family'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteFamily(Map<String, dynamic> family) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Family?'),
+        content: Text('Are you sure you want to delete ${family['family_head_name']}\'s family? This will permanently delete all members and their records.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              final success = await LocalDbService.deleteFamily(widget.token, family['id'].toString());
+              if (!mounted) return;
+              Navigator.pop(context);
+              if (success) {
+                _refreshFamilies();
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Family Deleted Successfully!')));
+              }
+            },
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFamiliesListView() {
     return FutureBuilder<List<dynamic>>(
       future: _familiesFuture,
@@ -238,7 +312,30 @@ class _ASHAHomeScreenState extends State<ASHAHomeScreen> {
                 ),
                 title: Text(family['family_head_name'], style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text('House No: ${family['house_number']} • Contact: ${family['contact_number'] ?? 'N/A'}'),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'view') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FamilyDetailScreen(
+                            family: family,
+                            token: widget.token,
+                          ),
+                        ),
+                      );
+                    } else if (value == 'edit') {
+                      _showEditFamilyDialog(family);
+                    } else if (value == 'delete') {
+                      _confirmDeleteFamily(family);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'view', child: ListTile(leading: Icon(Icons.open_in_new), title: Text('Open'))),
+                    const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit), title: Text('Edit'))),
+                    const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete, color: Colors.red), title: Text('Delete', style: TextStyle(color: Colors.red)))),
+                  ],
+                ),
                 onTap: () {
                   Navigator.push(
                     context,

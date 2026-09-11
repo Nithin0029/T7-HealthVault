@@ -40,7 +40,7 @@
 * **Data Visualization**
   * Dynamic line charts and trend tracking for patient vital histories.
 * **Offline-First Storage**
-  * Local SQLite storage with auto-seeded demo dataset and desktop/mobile FFI compatibility.
+  * Local SQLite storage with preloaded Karnataka geographic master data and desktop/mobile FFI compatibility.
 
 ---
 
